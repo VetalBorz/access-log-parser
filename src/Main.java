@@ -1,7 +1,28 @@
-//TIP To <b>Run</b> code, press <shortcut actionId="Run"/> or
-// click the <icon src="AllIcons.Actions.Execute"/> icon in the gutter.
+import java.util.Scanner;
+
 public class Main {
     public static void main(String[] args) {
-        System.out.printf("Случайное число от 0 до 1: " + Math.random());
+
+    //получаем первое число
+    System.out.println("Введите число:");
+    int firstNumber = new Scanner(System.in).nextInt();
+
+    //получаем второе число
+    System.out.println("Введите число:");
+    int secondNumber = new Scanner(System.in).nextInt();
+
+     //Вычесляем
+     int sum = firstNumber + secondNumber;
+     int difference = secondNumber - firstNumber;
+     int product = firstNumber * secondNumber;
+     double quotient = (double) firstNumber / secondNumber;
+
+     //Результат
+    System.out.println("Сумма: "+sum);
+    System.out.println("Разность: "+difference);
+    System.out.println("Произведение: "+product);
+    System.out.println("Частное: "+quotient);
+
+
     }
 }
