@@ -1,116 +1,68 @@
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
-import java.io.IOException;
-
-
-class LineTooLongException extends RuntimeException {
-    public LineTooLongException(String message) {
-        super(message);
-    }
-}
-
 
 public class Main {
     public static void main(String[] args) {
-        String path = "access.log";
-        File file = new File(path);
+        String filePath = "access.log";
 
-        if (!file.exists() || !file.isFile()) {
-            System.err.println("Файл не найден: " + path);
+        File file = new File(filePath);
+        if (!file.exists()) {
+            System.out.println("Файл не найден: " + filePath);
             return;
         }
 
-        int totalLines = 0;
-        int googleBotCount = 0;
-        int yandexBotCount = 0;
+        Statistics statistics = new Statistics();
 
         try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
             String line;
+            int lineCount = 0;
 
-            System.out.println("Анализирую " + path + "...");
+            System.out.println("Чтение файла...");
 
             while ((line = reader.readLine()) != null) {
-                totalLines++;
+                lineCount++;
 
-                if (line.length() > 1024) {
-                    throw new LineTooLongException(
-                            "Строка #" + totalLines + " превышает 1024 символа"
-                    );
+                if (line.trim().isEmpty()) {
+                    continue;
                 }
 
-                String userAgent = extractUserAgent(line);
-                if (userAgent != null) {
-                    String botName = extractBotNameFromUserAgent(userAgent);
+                LogEntry entry = new LogEntry(line);
 
-                    if (botName != null) {
-                        if (botName.equalsIgnoreCase("Googlebot") ||
-                                botName.equalsIgnoreCase("GoogleBot") ||
-                                botName.equalsIgnoreCase("Google")) {
-                            googleBotCount++;
-                        } else if (botName.equalsIgnoreCase("YandexBot") ||
-                                botName.equalsIgnoreCase("Yandex")) {
-                            yandexBotCount++;
-                        }
-                    }
+                statistics.addEntry(entry);
+
+                if (lineCount % 100 == 0) {
+                    System.out.println("Обработано строк: " + lineCount);
                 }
             }
 
-            System.out.println("=== РЕЗУЛЬТАТЫ ===");
-            System.out.println("Всего строк: " + totalLines);
+            System.out.println("\nФайл прочитан. Всего строк: " + lineCount);
 
-            if (totalLines > 0) {
-                System.out.println("GoogleBot:");
-                System.out.println("  Запросов: " + googleBotCount);
-                System.out.println("  Доля: " + String.format("%.2f%%",
-                        (double)googleBotCount / totalLines * 100));
+            statistics.printStatistics();
 
-                System.out.println("YandexBot:");
-                System.out.println("  Запросов: " + yandexBotCount);
-                System.out.println("  Доля: " + String.format("%.2f%%",
-                        (double)yandexBotCount / totalLines * 100));
-            }
+            System.out.println("\nПервые 5 записей для проверки:");
+            printFirstEntries(filePath, 5);
 
-        } catch (IOException e) {
-            System.err.println("Ошибка: " + e.getMessage());
-        } catch (LineTooLongException e) {
-            System.err.println("ОШИБКА: " + e.getMessage());
+        } catch (Exception e) {
+            System.out.println("Ошибка: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
-    private static String extractUserAgent(String logLine) {
+    private static void printFirstEntries(String filePath, int count) {
+        try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
+            String line;
+            int printed = 0;
 
-        int lastQuoteIndex = logLine.lastIndexOf('"');
-        if (lastQuoteIndex == -1) return null;
-
-        int secondLastQuoteIndex = logLine.lastIndexOf('"', lastQuoteIndex - 1);
-        if (secondLastQuoteIndex == -1) return null;
-
-        return logLine.substring(secondLastQuoteIndex + 1, lastQuoteIndex);
-    }
-
-    private static String extractBotNameFromUserAgent(String userAgent) {
-        try {
-            int start = userAgent.indexOf('(');
-            int end = userAgent.indexOf(')', start);
-
-            if (start == -1 || end == -1) {
-                return null;
-            }
-
-            String content = userAgent.substring(start + 1, end);
-            String[] parts = content.split(";");
-
-            if (parts.length >= 2) {
-                String fragment = parts[1].trim();
-                int slashIndex = fragment.indexOf('/');
-                if (slashIndex != -1) {
-                    return fragment.substring(0, slashIndex).trim();
+            while ((line = reader.readLine()) != null && printed < count) {
+                if (!line.trim().isEmpty()) {
+                    LogEntry entry = new LogEntry(line);
+                    System.out.println((printed + 1) + ". " + entry);
+                    printed++;
                 }
-                return fragment;
             }
         } catch (Exception e) {
+            System.out.println("Не удалось прочитать записи: " + e.getMessage());
         }
-        return null;
     }
 }
