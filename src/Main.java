@@ -1,32 +1,51 @@
-import java.util.Scanner;
-import java.io.File;
+import java.io.BufferedReader;
+import java.io.FileReader;
+
+
+class LineTooLongException extends RuntimeException {
+    public LineTooLongException(String message) {
+        super(message);
+    }
+}
+
 
 public class Main {
     public static void main(String[] args) {
-        Scanner scanner = new Scanner(System.in);
-        int correctFileCount = 0;
+        String path = "access.log";
 
-        while (true) {
-            System.out.println("Введите путь к файлу:");
-            String path = scanner.nextLine();
+        try {
+            FileReader fileReader = new FileReader(path);
+            BufferedReader reader = new BufferedReader(fileReader);
 
-            File file = new File(path);
-            boolean fileExists = file.exists();
-            boolean isDirectory = file.isDirectory();
+            String line;
+            int totalLines = 0;
+            int minLength = Integer.MAX_VALUE;
+            int maxLength = 0;
 
-            if (!fileExists || isDirectory) {
-                if (!fileExists) {
-                    System.out.println("Файл не существует");
+            while ((line = reader.readLine()) != null) {
+                int length = line.length();
+
+                // Проверка на максимальную длину
+                if (length > 1024) {
+                    throw new LineTooLongException(
+                            "Строка #" + (totalLines + 1) + " превышает 1024 символа. Длина: " + length
+                    );
                 }
-                if (isDirectory) {
-                    System.out.println("Указанный путь ведет к папке, а не к файлу");
-                }
-                continue;
+
+                totalLines++;
+                if (length < minLength) minLength = length;
+                if (length > maxLength) maxLength = length;
             }
 
-            correctFileCount++;
-            System.out.println("Путь указан верно");
-            System.out.println("Это файл номер " + correctFileCount);
+            reader.close();
+            fileReader.close();
+
+            System.out.println("Количество строк: " + totalLines);
+            System.out.println("Минимальная длина: " + (minLength == Integer.MAX_VALUE ? 0 : minLength));
+            System.out.println("Максимальная длина: " + maxLength);
+
+        } catch (Exception ex) {
+            ex.printStackTrace();
         }
     }
 }
