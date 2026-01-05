@@ -2,132 +2,130 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.util.Map;
-import java.util.Set;
 
 public class Main {
     public static void main(String[] args) {
-        // Путь к файлу
         String filePath = args.length > 0 ? args[0] : "access.log";
 
-        // Проверяем файл
         File file = new File(filePath);
         if (!file.exists()) {
             System.out.println("Файл не найден: " + filePath);
             return;
         }
 
-        // Создаем объект статистики
+        System.out.println("=".repeat(70));
+        System.out.println("АНАЛИЗ ЛОГ-ФАЙЛА С ИСПОЛЬЗОВАНИЕМ STREAM API");
+        System.out.println("=".repeat(70));
+        System.out.println("Файл: " + filePath);
+        System.out.println("Размер: " + file.length() + " байт");
+
         Statistics statistics = new Statistics();
+
+        long startTime = System.currentTimeMillis();
 
         try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
             String line;
             int lineCount = 0;
 
-            System.out.println("Чтение файла " + filePath + "...");
+            System.out.println("Чтение и анализ файла...");
 
             while ((line = reader.readLine()) != null) {
                 lineCount++;
 
-                // Пропускаем пустые строки
                 if (line.trim().isEmpty()) {
                     continue;
                 }
 
-                // Создаем объект LogEntry из строки
                 LogEntry entry = new LogEntry(line);
 
-                // Добавляем в статистику
                 statistics.addEntry(entry);
 
-                // Выводим прогресс каждые 1000 строк
-                if (lineCount % 1000 == 0) {
-                    System.out.println("Обработано строк: " + lineCount);
+                if (lineCount % 5000 == 0) {
+                    System.out.printf("Обработано строк: %,d%n", lineCount);
                 }
             }
 
-            System.out.println("\n" + "=".repeat(60));
-            System.out.println("АНАЛИЗ ЗАВЕРШЕН");
-            System.out.println("=".repeat(60));
-            System.out.println("Всего строк в файле: " + lineCount);
-            System.out.println("Обработано записей: " + statistics.getEntryCount());
+            long endTime = System.currentTimeMillis();
+            long processingTime = endTime - startTime;
 
-            // Выводим полную статистику
+            System.out.println(" " + "=".repeat(70));
+            System.out.println("АНАЛИЗ ЗАВЕРШЕН");
+            System.out.println("=".repeat(70));
+            System.out.printf("Время обработки: %,d мс%n", processingTime);
+            System.out.printf("Скорость обработки: %.2f строк/сек%n",
+                    lineCount / (processingTime / 1000.0));
+
             statistics.printStatistics();
 
-            // Детальная статистика по новым методам
-            System.out.println("\n" + "=".repeat(60));
-            System.out.println("ДЕТАЛЬНАЯ СТАТИСТИКА COLLECTIONS");
-            System.out.println("=".repeat(60));
-
-            // 1. Несуществующие страницы
-            System.out.println("\n1. НЕСУЩЕСТВУЮЩИЕ СТРАНИЦЫ (404)");
-            Set<String> notFoundPages = statistics.getNotFoundPages();
-            System.out.println("Всего несуществующих страниц: " + notFoundPages.size());
-
-            if (!notFoundPages.isEmpty()) {
-                System.out.println("Список несуществующих страниц:");
-                int count = 1;
-                for (String page : notFoundPages) {
-                    System.out.printf("%3d. %s%n", count++, page);
-                    if (count > 10 && notFoundPages.size() > 10) {
-                        System.out.printf("... и еще %d страниц%n", notFoundPages.size() - 10);
-                        break;
-                    }
-                }
-
-                // Наиболее часто запрашиваемые несуществующие страницы
-                System.out.println("\nРекомендация: проверьте эти URL на наличие опечаток или обновите ссылки");
-            }
-
-            // 2. Статистика браузеров
-            System.out.println("\n2. СТАТИСТИКА БРАУЗЕРОВ");
-            Map<String, Double> browserStats = statistics.getBrowserStatistics();
-
-            if (!browserStats.isEmpty()) {
-                System.out.println("Распределение браузеров среди пользователей:");
-                System.out.println("Браузер         Доля      Процент");
-                System.out.println("--------------- --------- ---------");
-
-                // Сортируем по убыванию доли для наглядности
-                browserStats.entrySet().stream()
-                        .sorted((a, b) -> Double.compare(b.getValue(), a.getValue()))
-                        .forEach(entry -> {
-                            String browser = entry.getKey();
-                            double proportion = entry.getValue();
-                            System.out.printf("%-15s %.4f    %6.2f%%%n",
-                                    browser, proportion, proportion * 100);
-                        });
-
-                // Наиболее популярный браузер
-                String mostPopular = browserStats.entrySet().stream()
-                        .max(Map.Entry.comparingByValue())
-                        .map(Map.Entry::getKey)
-                        .orElse("Не определен");
-
-                System.out.println("\nСамый популярный браузер: " + mostPopular);
-            }
-
-            // 3. Сводная информация
-            System.out.println("\n3. СВОДНАЯ ИНФОРМАЦИЯ");
-            System.out.println("Успешные запросы (200): " + statistics.getExistingPagesCount() + " уникальных страниц");
-            System.out.println("Ошибки 404: " + statistics.getNotFoundPagesCount() + " несуществующих страниц");
-
-            double errorRate = statistics.getEntryCount() > 0 ?
-                    (double) statistics.getNotFoundPagesCount() / statistics.getEntryCount() * 100 : 0;
-            System.out.printf("Процент ошибок 404: %.2f%%%n", errorRate);
-
-            if (errorRate > 5) {
-                System.out.println("⚠ Внимание: высокий процент ошибок 404 (>5%)");
-                System.out.println("   Рекомендуется проверить битые ссылки на сайте");
-            }
+            printAdditionalReports(statistics);
 
         } catch (Exception e) {
             System.out.println("Ошибка: " + e.getMessage());
             e.printStackTrace();
         }
+    }
 
-        System.out.println("\n" + "=".repeat(60));
-        System.out.println("АНАЛИЗ ЗАВЕРШЕН УСПЕШНО");
-        System.out.println("=".repeat(60));
+    private static void printAdditionalReports(Statistics stats) {
+        System.out.println(" " + "=".repeat(70));
+        System.out.println("ДОПОЛНИТЕЛЬНЫЕ ОТЧЕТЫ");
+        System.out.println("=".repeat(70));
+
+        System.out.println("ОТЧЕТ ПО ЭФФЕКТИВНОСТИ САЙТА:");
+
+        double avgVisitsPerHour = stats.getAverageVisitsPerHour();
+        double avgErrorsPerHour = stats.getAverageErrorRequestsPerHour();
+        double avgVisitsPerUser = stats.getAverageVisitsPerUser();
+
+        System.out.printf("Средняя посещаемость в час: %.2f%n", avgVisitsPerHour);
+        System.out.printf("Среднее количество ошибок в час: %.2f%n", avgErrorsPerHour);
+        System.out.printf("Средняя активность пользователя: %.2f запросов%n", avgVisitsPerUser);
+
+        System.out.println("ОЦЕНКА ЭФФЕКТИВНОСТИ:");
+        if (avgVisitsPerHour > 100) {
+            System.out.println("Высокая посещаемость сайта");
+        } else if (avgVisitsPerHour > 10) {
+            System.out.println("Средняя посещаемость сайта");
+        } else {
+            System.out.println("Низкая посещаемость сайта");
+        }
+
+        if (avgErrorsPerHour < 1) {
+            System.out.println("Низкий уровень ошибок");
+        } else if (avgErrorsPerHour < 5) {
+            System.out.println("Средний уровень ошибок");
+        } else {
+            System.out.println("Высокий уровень ошибок - требуется проверка");
+        }
+
+        if (avgVisitsPerUser > 3) {
+            System.out.println("Пользователи активно взаимодействуют с сайтом");
+        } else if (avgVisitsPerUser > 1) {
+            System.out.println("Средняя активность пользователей");
+        } else {
+            System.out.println("Низкая вовлеченность пользователей");
+        }
+
+        double botPercentage = stats.getBotPercentage();
+        System.out.println("СТАТИСТИКА БОТОВ:");
+        System.out.printf("Процент ботов: %.2f%%%n", botPercentage);
+        if (botPercentage > 50) {
+            System.out.println("Высокий процент ботов - возможно, требуется защита от сканирования");
+        } else if (botPercentage > 20) {
+            System.out.println("Заметное присутствие ботов");
+        } else {
+            System.out.println("Нормальный уровень активности ботов");
+        }
+
+        System.out.println("ТОП-10 САМЫХ ПОПУЛЯРНЫХ СТРАНИЦ:");
+        Map<String, Long> popularPages = stats.getPopularPages(10);
+        if (!popularPages.isEmpty()) {
+            int rank = 1;
+            for (Map.Entry<String, Long> entry : popularPages.entrySet()) {
+                System.out.printf("%2d. %-40s %,d посещений%n",
+                        rank++, entry.getKey(), entry.getValue());
+            }
+        }
+
+        System.out.println("=".repeat(70));
     }
 }

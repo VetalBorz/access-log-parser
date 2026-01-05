@@ -1,11 +1,12 @@
-
 public class UserAgent {
     private final String osType;
     private final String browser;
+    private final boolean isBot;
 
     public UserAgent(String userAgentString) {
         this.osType = parseOsType(userAgentString);
         this.browser = parseBrowser(userAgentString);
+        this.isBot = checkIfBot(userAgentString);
     }
 
     private String parseOsType(String userAgent) {
@@ -48,6 +49,21 @@ public class UserAgent {
         }
     }
 
+    private boolean checkIfBot(String userAgent) {
+        if (userAgent == null) return false;
+
+        userAgent = userAgent.toLowerCase();
+
+        return userAgent.contains("bot") ||
+                userAgent.contains("crawler") ||
+                userAgent.contains("spider") ||
+                userAgent.contains("googlebot") ||
+                userAgent.contains("yandexbot") ||
+                userAgent.contains("bingbot") ||
+                userAgent.contains("slurp") ||
+                userAgent.contains("duckduckbot");
+    }
+
     public String getOsType() {
         return osType;
     }
@@ -56,8 +72,12 @@ public class UserAgent {
         return browser;
     }
 
+    public boolean isBot() {
+        return isBot;
+    }
+
     @Override
     public String toString() {
-        return "OS: " + osType + ", Browser: " + browser;
+        return String.format("OS: %s, Browser: %s, Bot: %b", osType, browser, isBot);
     }
 }
