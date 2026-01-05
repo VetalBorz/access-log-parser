@@ -11,17 +11,17 @@ public class Statistics {
     private LocalDateTime minTime;
     private LocalDateTime maxTime;
     private int entryCount;
-
     private Set<String> existingPages;
     private Set<String> notFoundPages;
-
     private Map<String, Integer> osCounts;
     private Map<String, Integer> browserCounts;
-
     private Set<LogEntry> allEntries;
     private int errorRequestsCount;
     private int nonBotRequestsCount;
     private Set<String> uniqueNonBotIPs;
+    private Map<Long, Integer> visitsPerSecond;
+    private Set<String> refererDomains;
+    private Map<String, Integer> visitsPerIP;
 
     public Statistics() {
         this.totalTraffic = 0;
@@ -36,6 +36,9 @@ public class Statistics {
         this.errorRequestsCount = 0;
         this.nonBotRequestsCount = 0;
         this.uniqueNonBotIPs = new HashSet<>();
+        this.visitsPerSecond = new HashMap<>();
+        this.refererDomains = new HashSet<>();
+        this.visitsPerIP = new HashMap<>();
     }
 
     public void addEntry(LogEntry entry) {
@@ -69,6 +72,20 @@ public class Statistics {
         if (!entry.getUserAgent().isBot()) {
             nonBotRequestsCount++;
             uniqueNonBotIPs.add(entry.getIpAddress());
+
+            long secondsSinceEpoch = entryTime.toEpochSecond(java.time.ZoneOffset.UTC);
+            visitsPerSecond.put(secondsSinceEpoch,
+                    visitsPerSecond.getOrDefault(secondsSinceEpoch, 0) + 1);
+
+            visitsPerIP.put(entry.getIpAddress(),
+                    visitsPerIP.getOrDefault(entry.getIpAddress(), 0) + 1);
+        }
+
+        if (entry.getReferer() != null && !entry.getReferer().isEmpty()) {
+            String domain = extractDomainFromReferer(entry.getReferer());
+            if (domain != null && !domain.isEmpty()) {
+                refererDomains.add(domain);
+            }
         }
 
         String os = entry.getUserAgent().getOsType();
@@ -76,6 +93,83 @@ public class Statistics {
 
         String browser = entry.getUserAgent().getBrowser();
         browserCounts.put(browser, browserCounts.getOrDefault(browser, 0) + 1);
+    }
+
+    private String extractDomainFromReferer(String referer) {
+        try {
+            String url = referer.toLowerCase();
+            if (url.startsWith("http://")) {
+                url = url.substring(7);
+            } else if (url.startsWith("https://")) {
+                url = url.substring(8);
+            }
+
+            int slashIndex = url.indexOf('/');
+            if (slashIndex != -1) {
+                url = url.substring(0, slashIndex);
+            }
+
+            int colonIndex = url.indexOf(':');
+            if (colonIndex != -1) {
+                url = url.substring(0, colonIndex);
+            }
+
+            return url.trim();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    public int getPeakVisitsPerSecond() {
+        if (visitsPerSecond.isEmpty()) {
+            return 0;
+        }
+
+        return visitsPerSecond.values().stream()
+                .max(Integer::compare)
+                .orElse(0);
+    }
+
+    public LocalDateTime getPeakVisitsTime() {
+        if (visitsPerSecond.isEmpty()) {
+            return null;
+        }
+
+        long peakSecond = visitsPerSecond.entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .map(Map.Entry::getKey)
+                .orElse(0L);
+
+        return LocalDateTime.ofEpochSecond(peakSecond, 0, java.time.ZoneOffset.UTC);
+    }
+
+    public Set<String> getRefererDomains() {
+        return new HashSet<>(refererDomains);
+    }
+
+    public int getRefererDomainsCount() {
+        return refererDomains.size();
+    }
+
+    public int getMaxVisitsBySingleUser() {
+        if (visitsPerIP.isEmpty()) {
+            return 0;
+        }
+
+        return visitsPerIP.values().stream()
+                .max(Integer::compare)
+                .orElse(0);
+    }
+
+    public String getMostActiveUserIP() {
+        if (visitsPerIP.isEmpty()) {
+            return null;
+        }
+
+        return visitsPerIP.entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .map(Map.Entry::getKey)
+                .orElse(null);
     }
 
     public double getAverageVisitsPerHour() {
@@ -112,26 +206,13 @@ public class Statistics {
         return (double) nonBotRequestsCount / uniqueNonBotIPs.size();
     }
 
-    public double getAverageVisitsPerUserStream() {
-        if (allEntries.isEmpty()) {
+    public double getBotPercentage() {
+        if (entryCount == 0) {
             return 0.0;
         }
 
-        long nonBotCount = allEntries.stream()
-                .filter(entry -> !entry.getUserAgent().isBot())
-                .count();
-
-        long uniqueNonBotIPsCount = allEntries.stream()
-                .filter(entry -> !entry.getUserAgent().isBot())
-                .map(LogEntry::getIpAddress)
-                .distinct()
-                .count();
-
-        if (uniqueNonBotIPsCount == 0) {
-            return 0.0;
-        }
-
-        return (double) nonBotCount / uniqueNonBotIPsCount;
+        int botCount = entryCount - nonBotRequestsCount;
+        return (double) botCount / entryCount * 100;
     }
 
     public Map<Integer, Long> getResponseCodeStatistics() {
@@ -172,18 +253,6 @@ public class Statistics {
                         Map.Entry::getKey,
                         Map.Entry::getValue
                 ));
-    }
-
-    public double getBotPercentage() {
-        if (allEntries.isEmpty()) {
-            return 0.0;
-        }
-
-        long botCount = allEntries.stream()
-                .filter(entry -> entry.getUserAgent().isBot())
-                .count();
-
-        return (double) botCount / allEntries.size() * 100;
     }
 
     public Map<Integer, Long> getHourlyDistribution() {
@@ -251,36 +320,54 @@ public class Statistics {
     public int getUniqueNonBotUsersCount() { return uniqueNonBotIPs.size(); }
 
     public void printStatistics() {
-        System.out.println("=".repeat(70));
+        System.out.println("=".repeat(80));
         System.out.println("ПОЛНАЯ СТАТИСТИКА АНАЛИЗА ЛОГ-ФАЙЛА");
-        System.out.println("=".repeat(70));
+        System.out.println("=".repeat(80));
 
         System.out.println("ОСНОВНЫЕ ПОКАЗАТЕЛИ:");
         System.out.printf("Всего записей: %,d%n", entryCount);
-        System.out.printf("Период: %s - %s%n",
-                minTime != null ? minTime : "N/A",
-                maxTime != null ? maxTime : "N/A");
-
         if (minTime != null && maxTime != null) {
+            System.out.printf("Период: %s - %s%n", minTime, maxTime);
             long hours = ChronoUnit.HOURS.between(minTime, maxTime);
             System.out.printf("Продолжительность: %d часов%n", hours);
         }
 
-        System.out.println("STREAM API СТАТИСТИКА:");
+        System.out.println("ПОКАЗАТЕЛИ STREAM API #2:");
+
+        int peakVisits = getPeakVisitsPerSecond();
+        LocalDateTime peakTime = getPeakVisitsTime();
+        System.out.printf("Пиковая посещаемость: %d посещений/секунду%n", peakVisits);
+        if (peakTime != null) {
+            System.out.printf("Время пиковой посещаемости: %s%n", peakTime);
+        }
+
+        int refererCount = getRefererDomainsCount();
+        System.out.printf("Сайтов-источников трафика: %,d%n", refererCount);
+
+        int maxUserVisits = getMaxVisitsBySingleUser();
+        String mostActiveIP = getMostActiveUserIP();
+        System.out.printf("Максимальная посещаемость одним пользователем: %d запросов%n", maxUserVisits);
+        if (mostActiveIP != null) {
+            System.out.printf("Самый активный пользователь: %s%n", mostActiveIP);
+        }
+
+        System.out.println("СТАТИСТИКА:");
         System.out.printf("Среднее количество посещений в час: %.2f%n", getAverageVisitsPerHour());
         System.out.printf("Среднее количество ошибок в час: %.2f%n", getAverageErrorRequestsPerHour());
-        System.out.printf("Средняя посещаемость на пользователя: %.2f запросов%n", getAverageVisitsPerUser());
-        System.out.printf("Процент ботов: %.2f%%%n", getBotPercentage());
+        System.out.printf("Средняя посещаемость на пользователя: %.2f%n", getAverageVisitsPerUser());
 
-        System.out.println("СТАТИСТИКА ПОЛЬЗОВАТЕЛЕЙ:");
-        System.out.printf("Всего уникальных пользователей (не ботов): %,d%n", uniqueNonBotIPs.size());
-        System.out.printf("Запросов от обычных пользователей: %,d%n", nonBotRequestsCount);
-        System.out.printf("Запросов от ботов: %,d%n", entryCount - nonBotRequestsCount);
+        System.out.printf("Боты: %.2f%% от всех запросов%n", getBotPercentage());
 
-        System.out.println("СТАТИСТИКА ОШИБОК:");
-        System.out.printf("Всего ошибочных запросов (4xx, 5xx): %,d%n", errorRequestsCount);
-        System.out.printf("Процент ошибок: %.2f%%%n",
-                entryCount > 0 ? (double)errorRequestsCount / entryCount * 100 : 0);
+        System.out.println("ДОПОЛНИТЕЛЬНАЯ АНАЛИТИКА:");
+
+        if (!visitsPerSecond.isEmpty()) {
+            double avgVisitsPerSec = visitsPerSecond.values().stream()
+                    .mapToInt(Integer::intValue).average().orElse(0);
+            System.out.printf("Средняя посещаемость в секунду: %.2f%n", avgVisitsPerSec);
+            if (avgVisitsPerSec > 0) {
+                System.out.printf("Пик/Среднее: %.2f раз%n", peakVisits / avgVisitsPerSec);
+            }
+        }
 
         System.out.println("ТОП-5 САМЫХ АКТИВНЫХ ПОЛЬЗОВАТЕЛЕЙ:");
         Map<String, Long> topIPs = getTopActiveIPs(5);
@@ -289,21 +376,6 @@ public class Statistics {
                     System.out.printf("  %s: %,d запросов%n", ip, count));
         }
 
-        System.out.println("ТОП-5 САМЫХ ПОПУЛЯРНЫХ СТРАНИЦ:");
-        Map<String, Long> popularPages = getPopularPages(5);
-        if (!popularPages.isEmpty()) {
-            popularPages.forEach((page, count) ->
-                    System.out.printf("  %s: %,d посещений%n", page, count));
-        }
-
-        System.out.println("РАСПРЕДЕЛЕНИЕ ЗАПРОСОВ ПО ЧАСАМ:");
-        Map<Integer, Long> hourlyDist = getHourlyDistribution();
-        hourlyDist.entrySet().stream()
-                .sorted(Map.Entry.comparingByKey())
-                .forEach(entry ->
-                        System.out.printf("  %02d:00 - %02d:59: %,d запросов%n",
-                                entry.getKey(), entry.getKey(), entry.getValue()));
-
-        System.out.println("=".repeat(70));
+        System.out.println("=".repeat(80));
     }
 }
